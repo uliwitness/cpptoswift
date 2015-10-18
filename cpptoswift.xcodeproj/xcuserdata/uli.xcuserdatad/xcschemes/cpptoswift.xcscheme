@@ -63,15 +63,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "/Users/uli/Programming/intercombatsystem/intercombatsystem_cpp/intercombatsystem_number.hpp"
-            isEnabled = "NO">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "/Users/uli/Programming/intercombatsystem/intercombatsystem_cpp/intercombatsystem_cpp.hpp"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "/Users/uli/Programming/intercombatsystem/intercombatsystem_cpp/intercombatsystem"
+            argument = "/Users/uli/Programming/intercombatsystem/intercombatsystem_cpp/intercombatsystem.hpp"
             isEnabled = "YES">
          </CommandLineArgument>
       </CommandLineArguments>
