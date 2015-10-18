@@ -15,7 +15,7 @@ Put the following in your prefix header or at the start of every exported C++ he
 (This will hide cpp2swift's markup from the C++ compiler)
 
 Then mark up every class, constructor and method that you want to export from
-your class to Swift with C2PSCLASS, C2PSINIT resp. C2PSMETHOD. E.g. a simple example:
+your class to Swift with CP2SCLASS, CP2SINIT resp. CP2SMETHOD. E.g. a simple example:
 
 	#include <stdio.h>
 	
