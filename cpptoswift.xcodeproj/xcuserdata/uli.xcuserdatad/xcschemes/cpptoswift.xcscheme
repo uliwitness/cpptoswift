@@ -67,7 +67,7 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "/Users/uli/Programming/intercombatsystem/intercombatsystem_cpp/intercombatsystem_number.h"
+            argument = "/Users/uli/Programming/intercombatsystem/intercombatsystem_cpp/intercombatsystem_cpp.hpp"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument

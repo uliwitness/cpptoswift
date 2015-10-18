@@ -23,8 +23,9 @@ class cpptoswift
 	}
 	
 	
-	func cTypeToSwift( typeStr : String ) -> String
+	func cTypeToSwift( typeStr : String, inout isClass : Bool ) -> String
 	{
+		isClass = false;
 		switch( typeStr )
 		{
 			case "short":
@@ -33,10 +34,15 @@ class cpptoswift
 				return "Int32"
 			case "long":
 				return "Int64"
+			case "long long":
+				return "Int64"
 			case "void":
 				return "Void"
-			default:
-				return typeStr
+			case "double":
+				return "Double"
+			default:	// Unknown? Assume it's a class.
+				isClass = true
+				return typeStr.stringByTrimmingCharactersInSet( NSCharacterSet(charactersInString: "* \t\r\n") )
 		}
 	}
 	
@@ -49,7 +55,10 @@ class cpptoswift
 			let		parts = paramsWithTypes[x].stringByTrimmingCharactersInSet(NSCharacterSet.whitespaceAndNewlineCharacterSet()).componentsSeparatedByCharactersInSet( NSCharacterSet.whitespaceAndNewlineCharacterSet() )
 			let	allButLast = parts[0..<parts.count-1]
 			let paramType = NSArray(array:Array(allButLast)).componentsJoinedByString(" ")
-			paramsWithoutTypes.append( [ parts.last! as String, paramType, cTypeToSwift(paramType) ] )
+			var isClass = false
+			let swiftType = cTypeToSwift(paramType, isClass: &isClass)
+			let varName = parts.last! as String
+			paramsWithoutTypes.append( [ varName, paramType, swiftType, varName + (isClass ? ".cppinstance" : "") ] )
 		}
 		return paramsWithoutTypes
 	}
@@ -64,6 +73,15 @@ class cpptoswift
 	}
 	
 	func swiftCallParamsFromDeclaration( paramListStr : NSString ) -> String
+	{
+		let params = methodSignatureFromDeclaration( paramListStr )
+		
+		let paramNames = params.map { (var curr) -> String in return curr[3] }
+		
+		return NSArray(array: paramNames).componentsJoinedByString(",")
+	}
+	
+	func swiftDeclaration( paramListStr : NSString ) -> String
 	{
 		let params = methodSignatureFromDeclaration( paramListStr )
 		
@@ -88,12 +106,22 @@ class cpptoswift
 			var	foundClassRange : NSRange = fileContents.rangeOfString( "CP2SCLASS", options: NSStringCompareOptions(), range: searchRange )
 			let	foundMethodRange : NSRange = fileContents.rangeOfString( "CP2SMETHOD", options: NSStringCompareOptions(), range: searchRange )
 			let	foundInitRange : NSRange = fileContents.rangeOfString( "CP2SINIT", options: NSStringCompareOptions(), range: searchRange )
-			if foundMethodRange.location == NSNotFound && foundInitRange.location == NSNotFound && foundClassRange.location == NSNotFound
+			let	foundGetterRange : NSRange = fileContents.rangeOfString( "CP2SGETTER", options: NSStringCompareOptions(), range: searchRange )
+			let	foundSetterRange : NSRange = fileContents.rangeOfString( "CP2SSETTER", options: NSStringCompareOptions(), range: searchRange )
+			if foundMethodRange.location == NSNotFound && foundInitRange.location == NSNotFound && foundClassRange.location == NSNotFound && foundGetterRange.location == NSNotFound && foundSetterRange.location == NSNotFound
 			{
 				break;
 			}
 			
-			let	foundRange = (foundMethodRange.location < foundInitRange.location) ? foundMethodRange : foundInitRange
+			var	foundRange = (foundMethodRange.location < foundInitRange.location) ? foundMethodRange : foundInitRange
+			if( foundRange.location > foundGetterRange.location )
+			{
+				foundRange = foundGetterRange
+			}
+			if( foundRange.location > foundSetterRange.location )
+			{
+				foundRange = foundSetterRange
+			}
 			let	isInit = foundInitRange.location == foundRange.location
 			
 			if( foundClassRange.location != NSNotFound && foundClassRange.location < foundRange.location )
@@ -117,6 +145,9 @@ class cpptoswift
 							classSearchRange.length = fileLength - classSearchRange.location
 							
 							// Try to find the next class name declaration:
+							//	This is necessary as the defines to hide our tokens from the
+							//	C++ compiler give us false positives, and may be immediately followed
+							//	by another class declaration.
 							foundClassRange = fileContents.rangeOfString( "CP2SCLASS", options: NSStringCompareOptions(), range: classSearchRange )
 							if foundClassRange.location < foundRange.location
 							{
@@ -218,17 +249,18 @@ class cpptoswift
 				let	returnTypeStr = fileContents.substringWithRange( NSRange( location: returnTypeStartLocation!, length: returnTypeEndLocation! - returnTypeStartLocation! + 1) )
 				let	funcNameStr = fileContents.substringWithRange( NSRange( location: funcNameStartLocation!, length: funcNameEndLocation! - funcNameStartLocation!) )
 				let	paramListStr = fileContents.substringWithRange( NSRange( location: openingParenLocation!, length: closingParenLocation! - openingParenLocation!) )
+				var isClass : Bool = false
 				if( paramListStr != "" )
 				{
 					destinationHeaderContents += "\(returnTypeStr) \(classNameStr)_\(funcNameStr)( \(classNameStr)* _this, \(paramListStr));\n"
 					destinationSourceContents += "extern \"C\" \(returnTypeStr) \(classNameStr)_\(funcNameStr)( \(classNameStr)* _this, \(paramListStr))\n{\n\treturn _this->\(funcNameStr)(\(callParamsFromDeclaration(paramListStr)));\n}\n\n"
-					destinationSwiftContents += "\tpublic func \(funcNameStr)(\(swiftCallParamsFromDeclaration(paramListStr))) -> \(cTypeToSwift(returnTypeStr)) {\n\t\treturn \(classNameStr)_\(funcNameStr)(cppinstance, \(callParamsFromDeclaration(paramListStr)))\n\t}\n\n"
+					destinationSwiftContents += "\tpublic func \(funcNameStr)(\(swiftDeclaration(paramListStr))) -> \(cTypeToSwift(returnTypeStr,isClass:&isClass)) {\n\t\treturn \(classNameStr)_\(funcNameStr)(cppinstance, \(swiftCallParamsFromDeclaration(paramListStr)))\n\t}\n\n"
 				}
 				else
 				{
 					destinationHeaderContents += "\(returnTypeStr) \(classNameStr)_\(funcNameStr)( \(classNameStr)* _this );\n"
 					destinationSourceContents += "extern \"C\" \(returnTypeStr) \(classNameStr)_\(funcNameStr)( \(classNameStr)* _this )\n{\n\treturn _this->\(funcNameStr)();\n}\n\n"
-					destinationSwiftContents += "\tpublic func \(funcNameStr)() -> \(cTypeToSwift(returnTypeStr)) {\n\t\treturn \(classNameStr)_\(funcNameStr)(cppinstance)\n\t}\n\n"
+					destinationSwiftContents += "\tpublic func \(funcNameStr)() -> \(cTypeToSwift(returnTypeStr,isClass:&isClass)) {\n\t\treturn \(classNameStr)_\(funcNameStr)(cppinstance)\n\t}\n\n"
 				}
 			}
 			else if( funcNameStartLocation != nil )	// Constructor
@@ -247,7 +279,7 @@ class cpptoswift
 					{
 						destinationHeaderContents += "\(classNameStr)* \(classNameStr)_init(\(paramListStr));\n"
 						destinationSourceContents += "extern \"C\" \(classNameStr)* \(classNameStr)_init(\(paramListStr))\n{\n\treturn new \(classNameStr)(\(callParamsFromDeclaration(paramListStr)));\n}\n\n"
-						destinationSwiftContents += "\tpublic init(\(swiftCallParamsFromDeclaration(paramListStr))) {\n\t\tcppinstance = \(classNameStr)_init(\(callParamsFromDeclaration(paramListStr)))\n\t}\n\n"
+						destinationSwiftContents += "\tpublic init(\(swiftDeclaration(paramListStr))) {\n\t\tcppinstance = \(classNameStr)_init(\(swiftCallParamsFromDeclaration(paramListStr)))\n\t}\n\n"
 					}
 				}
 			}
