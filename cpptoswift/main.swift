@@ -52,6 +52,8 @@ class cpptoswift
 				return "Int64"
 			case "long long":
 				return "Int64"
+			case "bool":
+				return "Bool"
 			case "void":
 				return "Void"
 			case "double":
